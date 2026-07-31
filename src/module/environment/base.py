@@ -3,6 +3,7 @@
 
 import time
 import subprocess
+import json
 from abc import ABC, abstractmethod
 from typing import Union
 
@@ -108,33 +109,87 @@ class EnvironmentManager(ABC, Base):
                         ]
                         subprocess.run(command, check=True)
 
-    def check_pods_ready(self, interval: int = 15):
+    def check_pods_ready(self, interval: int = 15, timeout: int = 300):
         """
         Check if all pods in the namespace are ready.
 
         Parameters:
         - interval (int): Interval in seconds between readiness checks (default: 15).
         """
-        try:
-            self.info('Checking pod status for readiness...')
-            ready_cnt = 0
-            total_cnt = int(1e9)  # Placeholder for initial total count
-            while ready_cnt + self.unhealthy_pods < total_cnt:
-                jsonpath = r'{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+        self.info(f'Checking pods in persistent namespace {self.namespace}...')
+        deadline = time.monotonic() + timeout
+        required_deployments = (
+            global_config.get('heartbeat', {}).get('components', [])
+            if global_config.get('project', {}).get('reuse_existing', False)
+            else []
+        )
+        while time.monotonic() < deadline:
+            if required_deployments:
                 result = subprocess.run(
-                    ['kubectl', 'get', 'pods', '-n', self.namespace, f'-o=jsonpath={jsonpath}'],
-                    capture_output=True, text=True
-                ).stdout.strip()
-
-                lines = result.split('\n')
-                ready_cnt = sum(1 for line in lines if line.strip().lower() == 'true')
-                total_cnt = len(lines)
-
-                self.info(f'Pods Ready: {ready_cnt}/{total_cnt}')
+                    ['kubectl', 'get', 'deployments', '-n', self.namespace, '-o', 'json'],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError(
+                        f'Unable to inspect namespace {self.namespace}: '
+                        f'{result.stderr.strip()}'
+                    )
+                deployments = {
+                    item['metadata']['name']: item
+                    for item in json.loads(result.stdout).get('items', [])
+                }
+                missing = [
+                    name for name in required_deployments
+                    if name not in deployments
+                ]
+                if missing:
+                    raise RuntimeError(
+                        'Persistent Online Boutique is missing deployments: '
+                        + ', '.join(missing)
+                    )
+                ready_count = sum(
+                    deployment.get('status', {}).get('availableReplicas', 0)
+                    >= deployment.get('spec', {}).get('replicas', 1)
+                    for name, deployment in deployments.items()
+                    if name in required_deployments
+                )
+                total_count = len(required_deployments)
+                self.info(f'Deployments Ready: {ready_count}/{total_count}')
+                if ready_count == total_count:
+                    self.info('All ten Online Boutique deployments are ready.')
+                    return
                 time.sleep(interval)
+                continue
 
-        except KeyboardInterrupt:
-            self.warning('User interrupted the readiness check process.')
-            return
-
-        self.info('All pods are ready.')
+            result = subprocess.run(
+                ['kubectl', 'get', 'pods', '-n', self.namespace, '-o', 'json'],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f'Unable to inspect namespace {self.namespace}: {result.stderr.strip()}'
+                )
+            items = json.loads(result.stdout).get('items', [])
+            if not items:
+                raise RuntimeError(
+                    f'No pods found in persistent namespace {self.namespace}.'
+                )
+            ready_count = sum(
+                any(
+                    condition.get('type') == 'Ready'
+                    and condition.get('status') == 'True'
+                    for condition in pod.get('status', {}).get('conditions', [])
+                )
+                for pod in items
+            )
+            total_count = len(items)
+            self.info(f'Pods Ready: {ready_count}/{total_count}')
+            if ready_count + self.unhealthy_pods >= total_count:
+                self.info('All expected pods are ready.')
+                return
+            time.sleep(interval)
+        raise TimeoutError(
+            f'Pods in namespace {self.namespace} did not become ready within {timeout}s.'
+        )

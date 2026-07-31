@@ -10,28 +10,50 @@ chaos_path: {{base_path}}/src/module/chaos/
 
 project:
   deployment: kubernetes # ['kubernetes', 'helm']
-  name: sock-shop
-  namespace: sock-shop
-  path: {{base_path}}/kubernetes/sock-shop/
+  name: online-boutique
+  namespace: onlineboutique
+  # The Online Boutique installation is owned outside this experiment.  The
+  # runner only verifies readiness and never applies/deletes the application.
+  reuse_existing: true
+  path: ""
 
 traffic_loader:
   backend: locust # supported backend: ['locust']
+  # Locust is already installed in namespace "chaos"; do not create/delete it.
+  manage_lifecycle: false
+  namespace: chaos
   template_path: {{base_path}}/kubernetes/locust/locust_no_persistent_connection.yaml
 
 metrics_collector:
   backend: prometheus
+
+observability:
+  # Override these two values with PROMETHEUS_URL/JAEGER_URL when the services
+  # are exposed through an ingress, NodePort, or kubectl port-forward.
+  prometheus_url: http://localhost:9090
+  jaeger_url: http://localhost:16686
+  request_timeout_seconds: 10
+  post_action_delay_seconds: 15
+  jaeger_lookback_ms: 300000
+  audit_filename: agent_actions.jsonl
 
 dataset:
   path: {{base_path}}/data/dataset/
 
 agent:
   framework: autogen # ["autogen", "agentscope"]
+  graceful_shutdown_seconds: 360
   manager_tool_functions_path: {{base_path}}/src/agent/tool_functions_for_manager.py
   manager_prompt_template_path: {{base_path}}/prompts/cluster_manager.yaml
-  service_prompt_template_path: {{base_path}}/prompts/sock-shop-service.yaml
+  service_prompt_template_path: {{base_path}}/prompts/online-boutique-service.yaml
   
 
 rabbitmq:
+  # "sqlite" is the default local, cross-process message bus.  It preserves
+  # the old RabbitMQ interface without requiring a RabbitMQ server.
+  # Set backend to "rabbitmq" and configure url to use a real broker.
+  backend: sqlite
+  sqlite_path: {{base_path}}/results/message_bus.sqlite3
   url: pyamqp://guest@localhost//
   manager:
     exchange:
@@ -65,8 +87,16 @@ heartbeat:
   interval: 120
   cache_seed: null
   components:
-    - front-end
-    - catalogue
+    - adservice
+    - cartservice
+    - checkoutservice
+    - currencyservice
+    - emailservice
+    - frontend
+    - paymentservice
+    - productcatalogservice
+    - recommendationservice
+    - shippingservice
   task: |-
     This task is a regular check for the state of your microservice component. If a microservice component does not meet any criteria for a healthy state, you need to analyze the root cause and take corrective actions to recover it.
 
@@ -103,6 +133,14 @@ workload:
   increase:
     users: 100
     spawn_rate: 1
+
+experiment:
+  # Both CRs are applied before the agents start and deleted in reverse order
+  # in the runner's finally block.
+  chaos_max_duration_seconds: 1800
+  chaos_manifests:
+    - {{base_path}}/kubernetes/chaos/onlineboutique-productcatalog-pod-failure.yaml
+    - {{base_path}}/kubernetes/chaos/onlineboutique-checkout-cpu-stress.yaml
 mode2usage:
   light:
     min:

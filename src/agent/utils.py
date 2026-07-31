@@ -74,8 +74,15 @@ def load_service_maintainer_config(namespace: str, service_name: str, filename: 
         if 'fp' in k:
             maintainer_config[k] = os.path.join(global_config['project']['path'], v)
     
-    # Add Prometheus URL to the configuration
+    # Environment/config-based URL supports a remote persistent cluster and no
+    # longer assumes that the experiment runs inside Minikube.
     maintainer_config['prometheus_url'] = get_prometheus_url()
+    maintainer_config['jaeger_url'] = os.environ.get(
+        'JAEGER_URL',
+        global_config.get('observability', {}).get(
+            'jaeger_url', 'http://localhost:16686'
+        ),
+    ).rstrip('/')
     return maintainer_config
 
 def init_agentscope():

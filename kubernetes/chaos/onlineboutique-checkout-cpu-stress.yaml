@@ -1,0 +1,19 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: onlineboutique-checkout-cpu-stress
+  namespace: chaos
+  labels:
+    app.kubernetes.io/part-of: acv-onlineboutique-experiment
+spec:
+  mode: one
+  duration: 30m
+  selector:
+    namespaces:
+      - onlineboutique
+    labelSelectors:
+      app: checkoutservice
+  stressors:
+    cpu:
+      workers: 2
+      load: 80

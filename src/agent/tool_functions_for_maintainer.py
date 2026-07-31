@@ -1,6 +1,5 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
-from autogen.coding.func_with_reqs import with_requirements, ImportFromModule
 from typing import Literal
 
 def query_prometheus(promQL: str, **kwargs) -> list:
@@ -11,19 +10,24 @@ def query_prometheus(promQL: str, **kwargs) -> list:
     
     return: list, result of the query
     
-    Available metrics:
-    1. request_duration_seconds_count: for query per second (QPS) metric.
-    2. request_duration_seconds_bucket: for lantency metric.
-    Available filters:
-    1. name: the service name.
-    2. status_code: the status code of the request.
-    3. route: the route of the request.
+    Online Boutique metrics available in the supplied KPI & Resources dashboard:
+    1. traces_spanmetrics_calls_total: request rate and error rate.
+    2. traces_spanmetrics_duration_milliseconds_{sum,count,bucket}: mean and
+       percentile latency. Important labels include service_name, span_kind,
+       and status_code.
+    3. container_cpu_usage_seconds_total,
+       container_cpu_cfs_throttled_periods_total, and
+       kube_pod_container_resource_limits for CPU.
+    4. container_memory_working_set_bytes and container_memory_rss for memory.
+    5. container_network_{receive,transmit}_bytes_total and
+       container_fs_{reads,writes}_bytes_total for I/O.
+    Kubernetes resource labels include namespace and pod.
 
     Note: ALWAYS call print() to report the result so that planner can get the result.
 
     Example: 
     >>> from src.agent.tool_functions_for_maintainer import query_prometheus
-    >>> promQL = 'rate(request_duration_seconds_count{name="catalogue",status_code=~"2..",route!="metrics"}[1m])'
+    >>> promQL = 'sum(rate(traces_spanmetrics_calls_total{service_name="checkoutservice",span_kind="SPAN_KIND_SERVER"}[2m]))'
     >>> result = query_prometheus(promQL=promQL, duration='2m', step='1m')
     >>> print(result) # output the result so that planner can get it.
     [['2024-06-20 02:17:20', 0.0], ['2024-06-20 02:18:20', 0.0], ['2024-06-20 02:19:20', 0.0]]
@@ -33,7 +37,22 @@ def query_prometheus(promQL: str, **kwargs) -> list:
     result: list[list[str, int]] = prometheus_client.query_range(promQL, **kwargs)
     return result
 
-@with_requirements(python_packages=['Literal'], global_imports=[ImportFromModule('typing', 'Literal')])
+
+def query_jaeger_dependency_trace() -> dict:
+    """
+    Read Jaeger's service dependency graph for the configured lookback window.
+    The result is filtered to edges involving the ten Online Boutique services.
+
+    Note: ALWAYS call print() so the planner can read the result.
+
+    Example:
+    >>> from src.agent.tool_functions_for_maintainer import query_jaeger_dependency_trace
+    >>> print(query_jaeger_dependency_trace())
+    """
+    from src.module.system_state_collector import SystemStateCollector
+
+    return SystemStateCollector(namespace='onlineboutique').query_dependency_trace()
+
 def report_result(component: str, message: str, message_type: Literal['ISSUE', 'RESPONSE']) -> str:
     """
     This function can help you send a message to the manager.
@@ -47,7 +66,7 @@ def report_result(component: str, message: str, message_type: Literal['ISSUE', '
 
     Example:
     >>> from src.agent.tool_functions_for_maintainer import report_result
-    >>> component = 'catalogue'
+    >>> component = 'checkoutservice'
     >>> message = 'The task is completed.'
     >>> message_type = 'RESPONSE'
     >>> result = report_result(component=component, message=messages, message_type=message_type)
@@ -79,4 +98,4 @@ def report_result(component: str, message: str, message_type: Literal['ISSUE', '
     return 'Message sent to manager.'
 
 # use this list to store all the functions, do not change the name
-functions = [query_prometheus, report_result]
+functions = [query_prometheus, query_jaeger_dependency_trace, report_result]

@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 from typing import Literal
 from autogen.agentchat.contrib.society_of_mind_agent import SocietyOfMindAgent
 from autogen import (
@@ -19,6 +20,7 @@ from .utils import (
     TERMINATE,
     AWAITING_FLAG
 )
+from .audited_executor import AuditedUserProxyAgent
 
 # Load global configuration settings
 global_config = load_config()
@@ -37,6 +39,7 @@ class ClusterManager(SocietyOfMindAgent):
         human_input_mode: Literal["ALWAYS", "NEVER", "TERMINATE"] = "NEVER",
         max_turns: int = 40,
         cache_seed: int | None = 42,
+        audit_path: str | None = None,
         **kwargs
     ):
         """
@@ -92,8 +95,16 @@ class ClusterManager(SocietyOfMindAgent):
         planner = ClusterManagerAgent()
 
         # Define a code execution agent
-        code_executor = UserProxyAgent(
+        if audit_path is None:
+            audit_filename = global_config.get('observability', {}).get(
+                'audit_filename', 'agent_actions.jsonl'
+            )
+            audit_path = os.path.join(global_config['result_path'], audit_filename)
+
+        code_executor = AuditedUserProxyAgent(
             f"{name}-code-executor",
+            audit_path=audit_path,
+            service_name='cluster-manager',
             human_input_mode="NEVER",
             code_execution_config={
                 "work_dir": global_config['base_path'],  # Working directory for code execution
@@ -141,7 +152,11 @@ class ClusterManager(SocietyOfMindAgent):
         )
 
     @staticmethod
-    def _init_from_config(cache_seed: int | None = 42, components: list[str] = []):
+    def _init_from_config(
+        cache_seed: int | None = 42,
+        components: list[str] | None = None,
+        audit_path: str | None = None,
+    ):
         """
         Static method to initialize a ClusterManager using a configuration file.
         
@@ -158,7 +173,7 @@ class ClusterManager(SocietyOfMindAgent):
         prompter.load_prompt_template(global_config['agent']['manager_prompt_template_path'])
         prompter.fill_system_message({
             "namespace": global_config['project']['namespace'],
-            "service_maintainers": components
+            "service_maintainers": components or []
         })
 
         # Generate function descriptions
@@ -173,4 +188,5 @@ class ClusterManager(SocietyOfMindAgent):
             description=description,
             system_message=prompter.system_message,
             cache_seed=cache_seed,
+            audit_path=audit_path,
         )

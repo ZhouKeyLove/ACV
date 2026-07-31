@@ -214,15 +214,16 @@ def get_cluster_ip() -> str:
 
 def get_prometheus_url() -> str:
     """
-    Generate the Prometheus URL from the cluster IP.
+    Return the configured Prometheus URL.
 
     Returns:
     - str: Prometheus URL.
     """
-    minikube_ip = get_cluster_ip()
-    assert minikube_ip != "", 'Minikube IP not found.'
-    prometheus_url = f"http://{minikube_ip}:31090"
-    return prometheus_url
+    config = load_config()
+    return os.environ.get(
+        'PROMETHEUS_URL',
+        config.get('observability', {}).get('prometheus_url', 'http://localhost:9090')
+    ).rstrip('/')
 
 
 if __name__ == "__main__":

@@ -84,6 +84,12 @@ class TrafficLoader(Base):
         """
         Start traffic loading for the specified component.
         """
+        if not global_config['traffic_loader'].get('manage_lifecycle', True):
+            self.info(
+                'Reusing the existing Locust installation; '
+                'the experiment will not apply a Locust resource.'
+            )
+            return
         traffic = self.get_traffic()
         subprocess.Popen(
             ['kubectl', 'apply', '-f', '-'],
@@ -96,6 +102,9 @@ class TrafficLoader(Base):
         """
         Stop and remove traffic for the specified component.
         """
+        if not global_config['traffic_loader'].get('manage_lifecycle', True):
+            self.info('Leaving the existing Locust installation unchanged.')
+            return
         subprocess.run(
             ['kubectl', 'delete', '-f', global_config['traffic_loader']['template_path']],
             check=True

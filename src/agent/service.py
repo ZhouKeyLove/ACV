@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+import os
 from typing import Literal, Optional, Dict, Callable
 from autogen.agentchat.contrib.society_of_mind_agent import SocietyOfMindAgent
 from ..module import (
@@ -18,6 +19,7 @@ from .utils import (
     load_service_maintainer_config,
     TERMINATE
 )
+from .audited_executor import AuditedUserProxyAgent
 
 # Load global configuration settings
 global_config = load_config()
@@ -37,6 +39,7 @@ class ServiceMaintainer(SocietyOfMindAgent):
         is_termination_msg: Optional[Callable[[Dict], bool]] = TERMINATE,
         max_turns: int = 100,
         cache_seed: int | None = 42,
+        audit_path: str | None = None,
         **kwargs
     ):
         """
@@ -93,8 +96,16 @@ class ServiceMaintainer(SocietyOfMindAgent):
         self.assistant = ServiceMaintainerAgent()
 
         # Define the code executor agent
-        self._code_executor = UserProxyAgent(
+        if audit_path is None:
+            audit_filename = global_config.get('observability', {}).get(
+                'audit_filename', 'agent_actions.jsonl'
+            )
+            audit_path = os.path.join(global_config['result_path'], audit_filename)
+
+        self._code_executor = AuditedUserProxyAgent(
             f"{service_name}-code-executor",
+            audit_path=audit_path,
+            service_name=service_name,
             human_input_mode="NEVER",
             code_execution_config={
                 "work_dir": global_config['base_path'],  # Working directory for executing code
@@ -139,7 +150,12 @@ class ServiceMaintainer(SocietyOfMindAgent):
         self.description = service_description
 
     @staticmethod
-    def _init_from_config(service_name: str, cache_seed: int | None = 42, is_termination_msg: Optional[Callable[[Dict], bool]] = TERMINATE):
+    def _init_from_config(
+        service_name: str,
+        cache_seed: int | None = 42,
+        is_termination_msg: Optional[Callable[[Dict], bool]] = TERMINATE,
+        audit_path: str | None = None,
+    ):
         """
         Static method to initialize a ServiceMaintainer from configuration.
 
@@ -167,6 +183,7 @@ class ServiceMaintainer(SocietyOfMindAgent):
             system_message=prompter.system_message,
             is_termination_msg=is_termination_msg,
             cache_seed=cache_seed,
+            audit_path=audit_path,
         )
         return agent
 

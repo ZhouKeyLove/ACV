@@ -7,6 +7,7 @@ from .consumer import ManagerConsumer, ServiceMaintainerConsumer
 from .metrics_collector import MetricsCollector
 from .traffic_loader import TrafficLoader
 from .chaos_injector import ChaosInjector
+from .manifest_chaos_injector import ManifestChaosInjector
 from .chaos_factory import ChaosFactory
 from .message_queue import RabbitMQ
 from .prompter import Prompter

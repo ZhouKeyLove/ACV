@@ -22,7 +22,7 @@ Following the instructions below, you can reproduce the experiment results of th
 ## Getting Started
 
 ### Step 1: Installation
-Prerequisite: Linux System Environment, **[Docker](https://docs.docker.com/engine/install/)**, **[RabbitMQ](https://www.rabbitmq.com/docs/download)**
+Prerequisite for the legacy Sock Shop workflow: Linux, **[Docker](https://docs.docker.com/engine/install/)**, and RabbitMQ. The persistent Online Boutique L3/L4/L5 workflow below uses SQLite for agent messages and does not require a RabbitMQ server.
 
 ```bash
 # [optional to create conda environment]
@@ -154,11 +154,64 @@ python -m src.working_mechanism_2 \
 ```
 
 You can design your own task by changing the `--task` and `--components` parameters, explore and enjoy your trip!
+
 ### Step 3: Teardown environment
 After you finish your task, you can tear down the environment by using the following command:
 ```bash
 bash scripts/remove_project.sh
 ```
+
+## Persistent Online Boutique L3/L4/L5 experiments
+
+The high-level L3/L4/L5 runner is configured for an existing cluster and does
+not install or remove Online Boutique, Prometheus, Grafana, Jaeger, Locust, or
+Chaos Mesh. It always creates ServiceMaintainers for these ten services:
+`adservice`, `cartservice`, `checkoutservice`, `currencyservice`,
+`emailservice`, `frontend`, `paymentservice`, `productcatalogservice`,
+`recommendationservice`, and `shippingservice`.
+
+Before running, make sure the current kubeconfig can access the server. Expose
+Prometheus and Jaeger Query to the machine running Python, then configure their
+URLs. For example:
+
+```bash
+export PROMETHEUS_URL=http://127.0.0.1:9090
+export JAEGER_URL=http://127.0.0.1:16686
+```
+
+Run the two-fault experiment:
+
+```bash
+python -m src.empirical_high_level_L3_4_5 \
+  --instance onlineboutique_multi_fault \
+  --timeout 900 \
+  --cache_seed 42
+```
+
+Before fault injection, the runner verifies all ten Deployments and both
+observability APIs. The captured preflight is saved as
+`observability_preflight.json`; API/query errors abort the run before any CR is
+applied.
+
+The runner applies the two CRs in `kubernetes/chaos/` before the agents receive
+the task and deletes those exact CRs in the cleanup path. Both CRs also have a
+30-minute safety duration, and the runner rejects a `--timeout` plus graceful
+shutdown budget longer than that duration. If you need a longer experiment,
+update both CR durations and
+`experiment.chaos_max_duration_seconds` together. Use `--no-chaos` for a
+baseline. Locust is treated as externally managed; start the desired Locust
+test in namespace `chaos` before invoking the runner.
+
+RabbitMQ is no longer required for this runner. Agent control messages use an
+isolated SQLite database in each result directory. A real RabbitMQ server is
+still supported by setting `rabbitmq.backend: rabbitmq` and `rabbitmq.url` in
+`conf/global_config.yaml`.
+
+Each executed manager/maintainer code block produces a per-agent JSONL record
+named `agent_actions-<agent>.jsonl`. Every row contains `before`, `action`, and
+`after_15_seconds`; both states include the hard-coded Prometheus KPI/resource
+queries for all ten services and Jaeger's dependency graph under
+`jaeger.dependency_trace`.
 
 ## Contributing
 

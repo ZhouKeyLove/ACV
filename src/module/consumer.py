@@ -37,6 +37,7 @@ class Consumer(Base):
         """
         self.message_queue: RabbitMQ = None
         self.process: multiprocessing.Process = None
+        self.stop_event = multiprocessing.Event()
         self.agent: ConversableAgent = agent
         self.log_file_path: str = log_file_path
         self.name: str = agent.name
@@ -84,6 +85,7 @@ class Consumer(Base):
         if self.process:
             self.warning("Consumer is already running.")
             return
+        self.stop_event.clear()
         self.process = multiprocessing.Process(target=self.__start_consuming)
         self.process.start()
 
@@ -94,8 +96,18 @@ class Consumer(Base):
         if not self.process:
             self.warning("Consumer is not running.")
             return
-        self.process.terminate()
-        self.process.join()
+        self.stop_event.set()
+        graceful_timeout = global_config.get('agent', {}).get(
+            'graceful_shutdown_seconds', 360
+        )
+        self.process.join(timeout=graceful_timeout)
+        if self.process.is_alive():
+            self.warning(
+                f'Consumer did not finish within {graceful_timeout}s; '
+                'forcing termination. The in-flight action audit may be incomplete.'
+            )
+            self.process.terminate()
+            self.process.join()
         self.process = None
         self.info("Consumer stopped.")
 
@@ -149,7 +161,11 @@ class Consumer(Base):
         Start consuming messages from the queue.
         """
         try:
-            self.message_queue.subscribe(self.name, self.callback)
+            self.message_queue.subscribe(
+                self.name,
+                self.callback,
+                stop_event=self.stop_event,
+            )
         except KeyboardInterrupt:
             print("Connection closed.")
             exit(0)

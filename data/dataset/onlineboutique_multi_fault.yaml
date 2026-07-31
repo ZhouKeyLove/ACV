@@ -1,0 +1,7 @@
+namespace: onlineboutique
+autonomous_level: 5
+workload: moderate
+
+# The persistent-environment runner deliberately ignores legacy dataset
+# "environment" and "chaos" mutations.  Its two Chaos Mesh CRs are configured
+# under experiment.chaos_manifests in conf/global_config.yaml.

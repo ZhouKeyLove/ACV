@@ -1,6 +1,88 @@
 common: 
-  prometheus_url: <prometheus_url>
+  prometheus_url: http://localhost:9090
+  jaeger_url: http://localhost:16686
   tool_functions_path: src/agent/tool_functions_for_maintainer.py
+
+online-boutique:
+  adservice:
+    service_name: adservice
+    service_description: Returns contextual advertisements for the storefront.
+    namespace: onlineboutique
+    deployment_name: adservice
+    downstream_services: []
+    upstream_services: [frontend]
+
+  cartservice:
+    service_name: cartservice
+    service_description: Stores and retrieves users' shopping carts.
+    namespace: onlineboutique
+    deployment_name: cartservice
+    downstream_services: [redis-cart]
+    upstream_services: [frontend, checkoutservice]
+
+  checkoutservice:
+    service_name: checkoutservice
+    service_description: Orchestrates checkout, payment, shipping, and confirmation email.
+    namespace: onlineboutique
+    deployment_name: checkoutservice
+    downstream_services: [cartservice, productcatalogservice, currencyservice, paymentservice, shippingservice, emailservice]
+    upstream_services: [frontend]
+
+  currencyservice:
+    service_name: currencyservice
+    service_description: Converts monetary values between supported currencies.
+    namespace: onlineboutique
+    deployment_name: currencyservice
+    downstream_services: []
+    upstream_services: [frontend, checkoutservice]
+
+  emailservice:
+    service_name: emailservice
+    service_description: Sends order confirmation emails.
+    namespace: onlineboutique
+    deployment_name: emailservice
+    downstream_services: []
+    upstream_services: [checkoutservice]
+
+  frontend:
+    service_name: frontend
+    service_description: Serves the web UI and coordinates customer-facing requests.
+    namespace: onlineboutique
+    deployment_name: frontend
+    downstream_services: [adservice, cartservice, checkoutservice, currencyservice, productcatalogservice, recommendationservice, shippingservice]
+    upstream_services: []
+
+  paymentservice:
+    service_name: paymentservice
+    service_description: Charges the supplied payment information for an order.
+    namespace: onlineboutique
+    deployment_name: paymentservice
+    downstream_services: []
+    upstream_services: [checkoutservice]
+
+  productcatalogservice:
+    service_name: productcatalogservice
+    service_description: Provides product catalogue search and product details.
+    namespace: onlineboutique
+    deployment_name: productcatalogservice
+    downstream_services: []
+    upstream_services: [frontend, checkoutservice, recommendationservice]
+
+  recommendationservice:
+    service_name: recommendationservice
+    service_description: Recommends products based on catalogue contents.
+    namespace: onlineboutique
+    deployment_name: recommendationservice
+    downstream_services: [productcatalogservice]
+    upstream_services: [frontend]
+
+  shippingservice:
+    service_name: shippingservice
+    service_description: Calculates shipping costs and creates shipment tracking IDs.
+    namespace: onlineboutique
+    deployment_name: shippingservice
+    downstream_services: []
+    upstream_services: [frontend, checkoutservice]
 
 social-network:
   media-frontend:

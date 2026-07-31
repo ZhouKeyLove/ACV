@@ -6,6 +6,9 @@ import time
 import shutil
 import subprocess
 from .base import EnvironmentManager
+from ..utils import load_config
+
+global_config = load_config()
 
 class KubernetesEnvironmentManager(EnvironmentManager):
     """
@@ -39,6 +42,13 @@ class KubernetesEnvironmentManager(EnvironmentManager):
         4. Wait for the deployment to stabilize.
         5. Customize resources using the provided configuration file (if any).
         """
+        if global_config['project'].get('reuse_existing', False):
+            self.info(
+                f'Reusing existing namespace {self.namespace}; '
+                'no application manifests will be applied.'
+            )
+            return
+
         # Remove existing project path if it exists
         if os.path.exists(self.project_path):
             shutil.rmtree(self.project_path)
@@ -70,6 +80,12 @@ class KubernetesEnvironmentManager(EnvironmentManager):
         Steps:
         1. Delete the Kubernetes namespace for the project.
         """
+        if global_config['project'].get('reuse_existing', False):
+            self.info(
+                f'Leaving persistent namespace {self.namespace} unchanged.'
+            )
+            return
+
         # Delete namespace
         command = ['kubectl', 'delete', 'namespace', self.namespace]
         subprocess.run(command, check=True)

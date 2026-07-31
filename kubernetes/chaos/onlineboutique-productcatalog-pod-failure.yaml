@@ -1,0 +1,16 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: onlineboutique-productcatalog-pod-failure
+  namespace: chaos
+  labels:
+    app.kubernetes.io/part-of: acv-onlineboutique-experiment
+spec:
+  action: pod-failure
+  mode: one
+  duration: 30m
+  selector:
+    namespaces:
+      - onlineboutique
+    labelSelectors:
+      app: productcatalogservice
