@@ -1,0 +1,9 @@
+misc/
+logs/*
+results/*
+secret.*
+*/temp/
+**/experiments/*
+metrics/
+.env
+*.pyc
